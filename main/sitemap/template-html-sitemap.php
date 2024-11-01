@@ -1,0 +1,95 @@
+<?php
+/*
+* SiteSEO
+* https://siteseo.io/
+* (c) SiteSEO Team <support@siteseo.io>
+*/
+
+/*
+Copyright 2016 - 2024 - Benjamin Denis  (email : contact@seopress.org)
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License, version 2, as
+published by the Free Software Foundation.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+
+if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
+
+// Are we being accessed directly ?
+if(!defined('SITESEO_VERSION')) {
+	exit('Hacking Attempt !');
+}
+
+$args = apply_filters('siteseo_sitemaps_html_query', $args, $cpt_key);
+
+if (is_post_type_hierarchical($cpt_key)) {
+	$postslist = get_posts($args);
+
+	$args2 = [
+		'post_type'   => $cpt_key,
+		'include'	 => $postslist,
+		'sort_order'  => $siteseo_xml_sitemap_html_order_option,
+		'sort_column' => $siteseo_xml_sitemap_html_orderby_option,
+	];
+
+	$args2	 = apply_filters('siteseo_sitemaps_html_pages_query', $args2, $cpt_key);
+	$postslist = get_pages($args2);
+} else {
+	$postslist = get_posts($args);
+}
+
+if (! empty($postslist)) {
+	$date = true;
+	if (is_post_type_hierarchical($cpt_key)) {
+		$walker_page = new Walker_Page();
+		$html .= '<ul class="siteseo-list-posts siteseo-cpt-hierarchical">';
+		if (get_post_type_archive_link($cpt_key)) {
+			if (false === $display_archive) {
+				$html .= '<li><a href="' . esc_url(get_post_type_archive_link($cpt_key)) . '">' . esc_html($obj->labels->name) . '</a></li>';
+			}
+		}
+		$depth = 0;
+		$depth = apply_filters('siteseo_sitemaps_html_pages_depth_query', $depth);
+
+		$html .= $walker_page->walk($postslist, $depth);
+		$html .= '</ul>'; // 0 means display all levels.
+	} else {
+		$html .= '<ul class="siteseo-list-posts">';
+		if ('post' != $cpt_key && 'product' != $cpt_key && isset($obj->labels->name) && get_post_type_archive_link($cpt_key)) {//check if it's not the Post / Product post type
+			if (false === $display_archive) {
+				$html .= '<li><a href="' . get_post_type_archive_link($cpt_key) . '">' . $obj->labels->name . '</a></li>';
+			}
+		}
+
+		foreach ($postslist as $post) {
+			setup_postdata($post);
+
+			//Prevent duplicated items
+			if ($cpt_key === 'post' || $cpt_key === 'product') {
+				$tax = $cpt_key ==='product' ? $tax = 'product_cat'  : $tax = 'category';
+				if (!has_term($cat, $tax, $post)) {
+					continue;
+				}
+			}
+
+			$html .= '<li>';
+			$html .= '<a href="' . get_permalink($post) . '">' . get_the_title($post) . '</a>';
+			if ('1' != siteseo_get_service('SitemapOption')->getHtmlDate()) {
+				$date = apply_filters('siteseo_sitemaps_html_post_date', $date, $cpt_key);
+				if (true === $date) {
+					$html .= ' - ' . get_the_date('j F Y', $post);
+				}
+			}
+			$html .= '</li>';
+		}
+		wp_reset_postdata();
+		$html .= '</ul>';
+	}
+}
